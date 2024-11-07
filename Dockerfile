@@ -1,10 +1,4 @@
-# 第一阶段：从官方 API 镜像获取文件
-FROM langgenius/dify-api:0.11.0 AS api
-
-# 第二阶段：从官方 Web 镜像获取文件
-FROM langgenius/dify-web:0.11.0 AS web
-
-# 最终阶段：构建运行环境
+# 使用 Ubuntu 22.04 作为基础镜像
 FROM ubuntu:22.04
 
 # 避免交互式提示
@@ -40,20 +34,27 @@ RUN apt-get update && apt-get install -y \
 RUN curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION} | bash - \
     && apt-get install -y nodejs
 
-# 创建工作目录
+# 创建工作目录并克隆代码
 WORKDIR /app
-
-# 从之前的阶段复制文件
-COPY --from=api /app/api /app/api
-COPY --from=web /app/web /app/web
+RUN git clone --depth 1 --branch main https://github.com/langgenius/dify.git .
 
 # 创建并激活 Python 虚拟环境
 RUN python3 -m venv /opt/venv
 
-# 更新 pip 并安装后端依赖
-WORKDIR /app/api/core
+# 安装后端依赖
+WORKDIR /app/api
 RUN pip3 install --upgrade pip \
     && pip3 install --no-cache-dir -r requirements.txt
+
+# 安装并构建前端 Console
+WORKDIR /app/web/console
+RUN npm install \
+    && npm run build
+
+# 安装并构建前端 Share
+WORKDIR /app/web/share
+RUN npm install \
+    && npm run build
 
 # 配置 PostgreSQL
 USER postgres
