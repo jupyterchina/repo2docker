@@ -9,52 +9,25 @@ ENV NODE_VERSION=18.x \
     POSTGRES_PASSWORD=difyai123456 \
     POSTGRES_DB=dify \
     REDIS_PASSWORD=difyai123456 \
-    SANDBOX_API_KEY=dify-sandbox \
-    PYTHONPATH=/app/api \
-    PATH="/opt/venv/bin:$PATH"
+    SANDBOX_API_KEY=dify-sandbox
 
 # 安装基础依赖
 RUN apt-get update && apt-get install -y \
-    python3.10 \
-    python3-pip \
-    python3.10-dev \
-    python3.10-venv \
     postgresql \
     postgresql-contrib \
     redis-server \
-    curl \
     nginx \
-    git \
     supervisor \
-    build-essential \
-    libpq-dev \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
-# 安装 Node.js
-RUN curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION} | bash - \
-    && apt-get install -y nodejs
+# 从官方镜像中拉取已经构建好的应用
+FROM langgenius/dify-api:0.11.0 AS api
+FROM langgenius/dify-web:0.11.0 AS web
 
-# 创建工作目录并克隆代码
-WORKDIR /app
-RUN git clone --depth 1 --branch main https://github.com/langgenius/dify.git .
-
-# 创建并激活 Python 虚拟环境
-RUN python3 -m venv /opt/venv
-
-# 安装后端依赖
-WORKDIR /app/api
-RUN pip3 install --upgrade pip \
-    && pip3 install --no-cache-dir -r requirements.txt
-
-# 安装并构建前端 Console
-WORKDIR /app/web/console
-RUN npm install \
-    && npm run build
-
-# 安装并构建前端 Share
-WORKDIR /app/web/share
-RUN npm install \
-    && npm run build
+# 复制应用文件
+COPY --from=api /app /app
+COPY --from=web /app/web /app/web
 
 # 配置 PostgreSQL
 USER postgres
@@ -68,9 +41,6 @@ RUN sed -i 's/^# requirepass .*/requirepass '${REDIS_PASSWORD}'/' /etc/redis/red
 
 # 配置 Nginx
 COPY nginx.conf /etc/nginx/nginx.conf
-
-# 设置工作目录
-WORKDIR /app
 
 # 添加 supervisor 配置
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
