@@ -1,4 +1,10 @@
-# 使用 Ubuntu 22.04 作为基础镜像
+# 第一阶段：从官方 API 镜像获取文件
+FROM langgenius/dify-api:0.11.0 as api
+
+# 第二阶段：从官方 Web 镜像获取文件
+FROM langgenius/dify-web:0.11.0 as web
+
+# 最终阶段：构建运行环境
 FROM ubuntu:22.04
 
 # 避免交互式提示
@@ -35,11 +41,7 @@ RUN curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION} | bash - \
 # 创建工作目录
 WORKDIR /app
 
-# 拉取官方镜像中的文件
-FROM langgenius/dify-api:0.11.0 as api
-FROM langgenius/dify-web:0.11.0 as web
-
-# 复制文件从官方镜像
+# 从之前的阶段复制文件
 COPY --from=api /app/api /app/api
 COPY --from=web /app/web /app/web
 
