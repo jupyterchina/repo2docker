@@ -35,8 +35,13 @@ RUN curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION} | bash - \
 # 创建工作目录
 WORKDIR /app
 
-# 克隆特定版本的 Dify 项目
-RUN git clone --depth 1 --branch v0.4.15 https://github.com/langgenius/dify.git .
+# 拉取官方镜像中的文件
+FROM langgenius/dify-api:0.11.0 as api
+FROM langgenius/dify-web:0.11.0 as web
+
+# 复制文件从官方镜像
+COPY --from=api /app/api /app/api
+COPY --from=web /app/web /app/web
 
 # 创建并激活 Python 虚拟环境
 RUN python3 -m venv /opt/venv
@@ -45,17 +50,7 @@ ENV PATH="/opt/venv/bin:$PATH"
 # 更新 pip 并安装后端依赖
 RUN pip3 install --upgrade pip
 WORKDIR /app/api
-RUN pip3 install --no-cache-dir -r core/requirements.txt
-
-# 安装前端依赖并构建
-WORKDIR /app/web/console
-RUN npm install
-RUN npm run build
-
-# 安装前端 Share 依赖并构建
-WORKDIR /app/web/share
-RUN npm install
-RUN npm run build
+RUN pip3 install --no-cache-dir -r requirements.txt
 
 # 配置 PostgreSQL
 USER postgres
