@@ -1,4 +1,10 @@
-# 使用 Ubuntu 22.04 作为基础镜像
+# 获取 API 应用
+FROM langgenius/dify-api:0.11.0 AS api
+
+# 获取 Web 应用
+FROM langgenius/dify-web:0.11.0 AS web
+
+# 最终构建阶段
 FROM ubuntu:22.04
 
 # 避免交互式提示
@@ -21,12 +27,11 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# 从官方镜像中拉取已经构建好的应用
-FROM langgenius/dify-api:0.11.0 AS api
-FROM langgenius/dify-web:0.11.0 AS web
+WORKDIR /app
 
-# 复制应用文件
+# 从 API 镜像复制应用文件
 COPY --from=api /app /app
+# 从 Web 镜像复制前端文件
 COPY --from=web /app/web /app/web
 
 # 配置 PostgreSQL
@@ -50,14 +55,11 @@ RUN mkdir -p /app/api/storage/logs && \
     chown -R www-data:www-data /app/api/storage
 
 # 复制启动脚本
-COPY <<-'EOF' /app/start.sh
-#!/bin/bash
-service postgresql start
-service redis-server start
-supervisord -n
-EOF
-
-RUN chmod +x /app/start.sh
+RUN echo '#!/bin/bash\n\
+service postgresql start\n\
+service redis-server start\n\
+supervisord -n' > /app/start.sh && \
+chmod +x /app/start.sh
 
 # 暴露端口
 EXPOSE 80
