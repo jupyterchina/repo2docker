@@ -1,0 +1,27 @@
+[supervisord]
+nodaemon=true
+
+[program:postgresql]
+command=/usr/lib/postgresql/14/bin/postgres -D /var/lib/postgresql/14/main
+user=postgres
+autorestart=true
+
+[program:redis]
+command=/usr/bin/redis-server /etc/redis/redis.conf
+autorestart=true
+
+[program:dify-api]
+directory=/app/api
+command=python3 app.py
+environment=FLASK_ENV=production
+autorestart=true
+
+[program:dify-web]
+directory=/app/web
+command=npm start
+environment=NODE_ENV=production
+autorestart=true
+
+[program:nginx]
+command=nginx -g "daemon off;"
+autorestart=true
