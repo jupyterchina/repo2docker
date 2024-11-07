@@ -5,19 +5,18 @@ FROM ubuntu:22.04
 ENV DEBIAN_FRONTEND=noninteractive
 
 # 设置环境变量
-ENV PYTHONUNBUFFERED=1
 ENV NODE_VERSION=18.x
-ENV POSTGRES_USER=postgres
-ENV POSTGRES_PASSWORD=dify
+ENV POSTGRES_PASSWORD=difyai123456
 ENV POSTGRES_DB=dify
-ENV REDIS_HOST=localhost
-ENV REDIS_PORT=6379
-ENV REDIS_PASSWORD=dify
+ENV REDIS_PASSWORD=difyai123456
+ENV SANDBOX_API_KEY=dify-sandbox
 
 # 安装基础依赖
 RUN apt-get update && apt-get install -y \
     python3.10 \
     python3-pip \
+    python3.10-dev \
+    python3.10-venv \
     postgresql \
     postgresql-contrib \
     redis-server \
@@ -25,42 +24,70 @@ RUN apt-get update && apt-get install -y \
     nginx \
     git \
     supervisor \
+    build-essential \
+    libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # 安装 Node.js
 RUN curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION} | bash - \
     && apt-get install -y nodejs
 
-# 克隆 Dify 项目
-RUN git clone https://github.com/langgenius/dify.git /app
+# 创建工作目录
 WORKDIR /app
 
-# 安装后端依赖
-RUN pip3 install -r api/requirements.txt
+# 克隆特定版本的 Dify 项目
+RUN git clone --depth 1 --branch v0.4.15 https://github.com/langgenius/dify.git .
+
+# 创建并激活 Python 虚拟环境
+RUN python3 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# 更新 pip 并安装后端依赖
+RUN pip3 install --upgrade pip
+WORKDIR /app/api
+RUN pip3 install --no-cache-dir -r core/requirements.txt
 
 # 安装前端依赖并构建
-WORKDIR /app/web
+WORKDIR /app/web/console
+RUN npm install
+RUN npm run build
+
+# 安装前端 Share 依赖并构建
+WORKDIR /app/web/share
 RUN npm install
 RUN npm run build
 
 # 配置 PostgreSQL
 USER postgres
 RUN /etc/init.d/postgresql start && \
-    psql -c "ALTER USER postgres WITH PASSWORD '$POSTGRES_PASSWORD';" && \
-    psql -c "CREATE DATABASE $POSTGRES_DB;"
+    psql -c "ALTER USER postgres WITH PASSWORD '${POSTGRES_PASSWORD}';" && \
+    psql -c "CREATE DATABASE ${POSTGRES_DB};"
 USER root
 
 # 配置 Redis
-RUN sed -i 's/^# requirepass.*/requirepass dify/' /etc/redis/redis.conf
+RUN sed -i 's/^# requirepass .*/requirepass '${REDIS_PASSWORD}'/' /etc/redis/redis.conf
 
 # 配置 Nginx
 COPY nginx.conf /etc/nginx/nginx.conf
 
-# 配置 Supervisor
+# 设置工作目录
+WORKDIR /app
+
+# 添加 supervisor 配置
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
-# 暴露端口
-EXPOSE 80 3000 5001
+# 创建需要的目录
+RUN mkdir -p /app/api/storage/logs && \
+    chown -R www-data:www-data /app/api/storage
 
-# 启动服务
-CMD ["/usr/bin/supervisord", "-n"]
+# 暴露端口
+EXPOSE 80
+
+# 启动脚本
+RUN echo '#!/bin/bash\n\
+service postgresql start\n\
+service redis-server start\n\
+supervisord -n' > /app/start.sh && \
+chmod +x /app/start.sh
+
+CMD ["/app/start.sh"]
