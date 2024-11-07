@@ -1,8 +1,8 @@
 # 第一阶段：从官方 API 镜像获取文件
-FROM langgenius/dify-api:0.11.0 as api
+FROM langgenius/dify-api:0.11.0 AS api
 
 # 第二阶段：从官方 Web 镜像获取文件
-FROM langgenius/dify-web:0.11.0 as web
+FROM langgenius/dify-web:0.11.0 AS web
 
 # 最终阶段：构建运行环境
 FROM ubuntu:22.04
@@ -11,11 +11,13 @@ FROM ubuntu:22.04
 ENV DEBIAN_FRONTEND=noninteractive
 
 # 设置环境变量
-ENV NODE_VERSION=18.x
-ENV POSTGRES_PASSWORD=difyai123456
-ENV POSTGRES_DB=dify
-ENV REDIS_PASSWORD=difyai123456
-ENV SANDBOX_API_KEY=dify-sandbox
+ENV NODE_VERSION=18.x \
+    POSTGRES_PASSWORD=difyai123456 \
+    POSTGRES_DB=dify \
+    REDIS_PASSWORD=difyai123456 \
+    SANDBOX_API_KEY=dify-sandbox \
+    PYTHONPATH=/app/api \
+    PATH="/opt/venv/bin:$PATH"
 
 # 安装基础依赖
 RUN apt-get update && apt-get install -y \
@@ -47,12 +49,11 @@ COPY --from=web /app/web /app/web
 
 # 创建并激活 Python 虚拟环境
 RUN python3 -m venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
 
 # 更新 pip 并安装后端依赖
-RUN pip3 install --upgrade pip
-WORKDIR /app/api
-RUN pip3 install --no-cache-dir -r requirements.txt
+WORKDIR /app/api/core
+RUN pip3 install --upgrade pip \
+    && pip3 install --no-cache-dir -r requirements.txt
 
 # 配置 PostgreSQL
 USER postgres
@@ -77,14 +78,17 @@ COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 RUN mkdir -p /app/api/storage/logs && \
     chown -R www-data:www-data /app/api/storage
 
+# 复制启动脚本
+COPY <<-'EOF' /app/start.sh
+#!/bin/bash
+service postgresql start
+service redis-server start
+supervisord -n
+EOF
+
+RUN chmod +x /app/start.sh
+
 # 暴露端口
 EXPOSE 80
-
-# 启动脚本
-RUN echo '#!/bin/bash\n\
-service postgresql start\n\
-service redis-server start\n\
-supervisord -n' > /app/start.sh && \
-chmod +x /app/start.sh
 
 CMD ["/app/start.sh"]
